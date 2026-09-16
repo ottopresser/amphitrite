@@ -2790,6 +2790,7 @@ export default function App() {
                         ...current,
                         bootSourceType: nextType,
                         bootSource: '',
+                        bootloader: nextType === 'template' ? current.bootloader : '',
                       }));
                     }}
                   >
@@ -2801,13 +2802,18 @@ export default function App() {
                 <label className="field">
                   <span>Bootloader</span>
                   <select
+                    disabled={createVmForm.bootSourceType !== 'template'}
                     value={createVmForm.bootloader}
                     onChange={(event) => {
                       const bootloader = event.target.value as '' | 'bhyveload' | 'grub' | 'uefi' | 'uefi-csm';
                       setCreateVmForm((current) => ({ ...current, bootloader }));
                     }}
                   >
-                    <option value="">Poseidon default</option>
+                    <option value="">
+                      {createVmForm.bootSourceType === 'template'
+                        ? 'Poseidon default'
+                        : 'UEFI (set by Poseidon)'}
+                    </option>
                     <option value="bhyveload">bhyveload</option>
                     <option value="grub">grub</option>
                     <option value="uefi">uefi</option>
