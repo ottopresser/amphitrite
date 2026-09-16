@@ -159,33 +159,28 @@ ensure_node_and_pnpm() {
     fi
   fi
 
-  if command -v pnpm >/dev/null 2>&1; then
+  if command -v pnpm >/dev/null 2>&1 && pnpm --version >/dev/null 2>&1; then
     return
   fi
 
-  echo "pnpm not found; attempting install via corepack/npm"
+  echo "Installing pnpm@11.5.2 via npm"
 
-  if command -v corepack >/dev/null 2>&1; then
-    corepack enable || true
-    corepack prepare pnpm@11.5.2 --activate
-  elif command -v npm >/dev/null 2>&1; then
-    if [[ $EUID -eq 0 ]]; then
-      npm install -g pnpm@11.5.2
-    else
-      run_as_root npm install -g pnpm@11.5.2
-    fi
-  else
+  if ! command -v npm >/dev/null 2>&1; then
     echo "npm is missing; attempting to install npm"
     install_packages npm
-    if [[ $EUID -eq 0 ]]; then
-      npm install -g pnpm@11.5.2
-    else
-      run_as_root npm install -g pnpm@11.5.2
-    fi
+  fi
+
+  if [[ $EUID -eq 0 ]]; then
+    npm install --global --force pnpm@11.5.2
+  else
+    run_as_root npm install --global --force pnpm@11.5.2
   fi
 
   hash -r
-  require_command pnpm
+  if ! command -v pnpm >/dev/null 2>&1 || ! pnpm --version >/dev/null 2>&1; then
+    echo "pnpm installation failed. Install pnpm@11.5.2 manually and re-run." >&2
+    exit 1
+  fi
 }
 
 parse_args() {

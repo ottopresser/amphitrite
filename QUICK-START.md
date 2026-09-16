@@ -187,6 +187,7 @@ The automatic installer updates an existing Git installation when run again with
 - **Console does not connect:** Ensure the reverse proxy supports WebSocket upgrades and that the relevant Poseidon or VNC ports are reachable.
 - **Port is already in use:** Set another port with `PORT` or the installer's `--port` option.
 - **Changes to `.env.local` are ignored:** Saved `data/poseidon-servers.json` settings take precedence. Update the host in **Settings** or remove the saved file after making a backup.
+- **Corepack reports `ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING`:** Pull the latest installer and run it again. The installer bypasses incompatible distro Corepack wrappers and installs the pinned pnpm CLI through npm.
 
 ## Security Notes
 
