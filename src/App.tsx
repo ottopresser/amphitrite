@@ -1549,6 +1549,7 @@ export default function App() {
 
       const normalizedCpu = Math.trunc(cpu);
       const normalizedMemory = `${Math.trunc(memoryMb)}M`;
+      const needsPostCreateConfig = Boolean(createVmForm.bootloader);
 
       const payload: VmCreateRequest = {
         vm_name: createVmForm.vmName.trim(),
@@ -1569,7 +1570,7 @@ export default function App() {
           source: createVmForm.bootSource.trim(),
         },
         options: {
-          start_after_create: false,
+          start_after_create: createVmForm.startAfterCreate && !needsPostCreateConfig,
           validate_only: createVmForm.validateOnly,
         },
       };
@@ -1602,7 +1603,12 @@ export default function App() {
         }
       }
 
-      if (!createVmForm.validateOnly && createVmForm.startAfterCreate && !postCreateError) {
+      if (
+        !createVmForm.validateOnly
+        && createVmForm.startAfterCreate
+        && needsPostCreateConfig
+        && !postCreateError
+      ) {
         try {
           await readJson<VmActionResponse>(
             `/api/servers/${encodeURIComponent(createVmForm.serverId)}/vms/${encodeURIComponent(createVmForm.vmName.trim())}/actions/start`,
