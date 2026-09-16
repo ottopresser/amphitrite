@@ -1243,7 +1243,7 @@ export default function App() {
     cpu: '2',
     memory: '2048',
     diskSize: '20480',
-    storageTarget: 'default',
+    storageTarget: '/vm',
     networkSwitch: 'public',
     interfaceType: 'virtio-net',
     bootloader: '',
@@ -1542,6 +1542,11 @@ export default function App() {
         throw new Error('Disk size must be a positive integer in MB.');
       }
 
+      const storageTarget = createVmForm.storageTarget.trim();
+      if (!storageTarget.startsWith('/')) {
+        throw new Error('Storage target must be an absolute path beginning with /.');
+      }
+
       const normalizedCpu = Math.trunc(cpu);
       const normalizedMemory = `${Math.trunc(memoryMb)}M`;
 
@@ -1553,7 +1558,7 @@ export default function App() {
         },
         disk: {
           size: `${Math.trunc(diskMb)}M`,
-          storage_target: createVmForm.storageTarget.trim(),
+          storage_target: storageTarget,
         },
         network: {
           switch: createVmForm.networkSwitch.trim(),
@@ -1564,7 +1569,7 @@ export default function App() {
           source: createVmForm.bootSource.trim(),
         },
         options: {
-          start_after_create: createVmForm.startAfterCreate,
+          start_after_create: false,
           validate_only: createVmForm.validateOnly,
         },
       };
@@ -1577,8 +1582,9 @@ export default function App() {
           body: JSON.stringify(payload),
         },
       );
+      setIsCreateVmOpen(false);
 
-      let bootloaderWarning: string | null = null;
+      let postCreateError: string | null = null;
       if (!createVmForm.validateOnly && createVmForm.bootloader) {
         try {
           await readJson<VmActionResponse>(
@@ -1592,7 +1598,18 @@ export default function App() {
             },
           );
         } catch (error) {
-          bootloaderWarning = error instanceof Error ? error.message : 'Unexpected bootloader configure error';
+          postCreateError = error instanceof Error ? error.message : 'Unexpected bootloader configure error';
+        }
+      }
+
+      if (!createVmForm.validateOnly && createVmForm.startAfterCreate && !postCreateError) {
+        try {
+          await readJson<VmActionResponse>(
+            `/api/servers/${encodeURIComponent(createVmForm.serverId)}/vms/${encodeURIComponent(createVmForm.vmName.trim())}/actions/start`,
+            { method: 'POST' },
+          );
+        } catch (error) {
+          postCreateError = error instanceof Error ? error.message : 'Unexpected VM start error';
         }
       }
 
@@ -1610,11 +1627,11 @@ export default function App() {
               `VM ${result.vm_name} created (${result.status}), but root disk verification failed: disk0 is missing in VM config.`,
             );
           } else {
-            setFleetMessage(
-              bootloaderWarning
-                ? `VM ${result.vm_name} created (${result.status}), but bootloader apply failed: ${bootloaderWarning}`
-                : `VM ${result.vm_name} create request succeeded (${result.status}).`,
-            );
+            if (postCreateError) {
+              setFleetError(`VM ${result.vm_name} was created, but a post-create step failed: ${postCreateError}`);
+            } else {
+              setFleetMessage(`VM ${result.vm_name} create request succeeded (${result.status}).`);
+            }
           }
         } catch (error) {
           setFleetError(
@@ -1622,13 +1639,8 @@ export default function App() {
           );
         }
       } else {
-        setFleetMessage(
-          bootloaderWarning
-            ? `VM ${result.vm_name} created (${result.status}), but bootloader apply failed: ${bootloaderWarning}`
-            : `VM ${result.vm_name} create request succeeded (${result.status}).`,
-        );
+        setFleetMessage(`VM ${result.vm_name} validation succeeded (${result.status}).`);
       }
-      setIsCreateVmOpen(false);
       setSelected({ serverId: createVmForm.serverId, vmName: createVmForm.vmName.trim() });
       await refreshOverview();
       await loadVmDetail({ serverId: createVmForm.serverId, vmName: createVmForm.vmName.trim() });
@@ -2736,7 +2748,9 @@ export default function App() {
                 <label className="field">
                   <span>Storage target</span>
                   <input
+                    pattern="/.*"
                     required
+                    title="Enter an absolute path beginning with /"
                     value={createVmForm.storageTarget}
                     onChange={(event) =>
                       setCreateVmForm((current) => ({ ...current, storageTarget: event.target.value }))
@@ -2829,7 +2843,7 @@ export default function App() {
                           : `Select ${createVmForm.bootSourceType.toUpperCase()} file`}
                       </option>
                       {createVmMediaOptions.map((item) => (
-                        <option key={item.file_name} value={item.file_path}>
+                        <option key={item.file_name} value={item.file_name}>
                           {item.file_name}
                         </option>
                       ))}

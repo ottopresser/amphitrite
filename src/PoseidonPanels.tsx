@@ -24,8 +24,8 @@ type VmMetrics = {
   state: string;
   configured_cpu?: number;
   configured_memory?: string;
-  cpu_percent?: number;
-  resident_memory_bytes?: number;
+  cpu_percent?: number | null;
+  resident_memory_bytes?: number | null;
   uptime?: string;
   network?: Array<{
     interface: string;
@@ -47,7 +47,7 @@ type Operation = {
   method: string;
   path: string;
   status_code: number;
-  duration_ms: number;
+  duration_ms: number | null;
   client: string;
 };
 
@@ -88,8 +88,8 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-function bytes(value?: number): string {
-  if (value === undefined) return 'n/a';
+function bytes(value?: number | null): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 'n/a';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   let size = value;
   let unit = 0;
@@ -140,7 +140,7 @@ export function VmMetricsPanel({ serverId, vmName }: { serverId: string; vmName:
       {error ? <p className="callout callout--error">{error}</p> : null}
       <div className="inventory-grid inventory-grid--metrics">
         <div><span className="metric-label">State</span><strong>{metrics?.state ?? 'n/a'}</strong></div>
-        <div><span className="metric-label">CPU usage</span><strong>{metrics?.cpu_percent === undefined ? 'n/a' : `${metrics.cpu_percent.toFixed(1)}%`}</strong></div>
+        <div><span className="metric-label">CPU usage</span><strong>{typeof metrics?.cpu_percent === 'number' ? `${metrics.cpu_percent.toFixed(1)}%` : 'n/a'}</strong></div>
         <div><span className="metric-label">Resident memory</span><strong>{bytes(metrics?.resident_memory_bytes)}</strong></div>
         <div><span className="metric-label">Uptime</span><strong>{metrics?.uptime ?? 'n/a'}</strong></div>
       </div>
@@ -215,7 +215,7 @@ export function HostOperationsPanel({ serverId }: { serverId: string }) {
               {metrics.map((item) => (
                 <tr key={item.vm_name}>
                   <td><strong>{item.vm_name}</strong></td><td>{item.state}</td>
-                  <td>{item.cpu_percent === undefined ? 'n/a' : `${item.cpu_percent.toFixed(1)}%`}</td>
+                  <td>{typeof item.cpu_percent === 'number' ? `${item.cpu_percent.toFixed(1)}%` : 'n/a'}</td>
                   <td>{bytes(item.resident_memory_bytes)}</td><td>{item.uptime ?? 'n/a'}</td>
                 </tr>
               ))}
@@ -249,7 +249,8 @@ export function HostOperationsPanel({ serverId }: { serverId: string }) {
                 <tr key={item.operation_id}>
                   <td>{new Date(item.timestamp_epoch * 1000).toLocaleTimeString()}</td>
                   <td><span className={`method method--${item.method.toLowerCase()}`}>{item.method}</span></td>
-                  <td><code>{item.path}</code></td><td>{item.status_code}</td><td>{item.duration_ms.toFixed(1)} ms</td>
+                  <td><code>{item.path}</code></td><td>{item.status_code}</td>
+                  <td>{typeof item.duration_ms === 'number' ? `${item.duration_ms.toFixed(1)} ms` : 'n/a'}</td>
                 </tr>
               ))}
             </tbody>
