@@ -59,6 +59,16 @@ export type CommandResult = {
   stderr: string;
 };
 
+export type VmIpAddressResponse = {
+  vm_name: string;
+  ip_address: string | null;
+  interfaces: Array<{
+    network_index: number;
+    mac_address: string;
+    ip_addresses: string[];
+  }>;
+};
+
 export type VmInfoResponse = {
   vm_name: string;
   result: CommandResult;
