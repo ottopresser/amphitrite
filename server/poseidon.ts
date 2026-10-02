@@ -23,6 +23,16 @@ export type CommandResult = {
   stderr: string;
 };
 
+export type VmIpAddressResponse = {
+  vm_name: string;
+  ip_address: string | null;
+  interfaces: Array<{
+    network_index: number;
+    mac_address: string;
+    ip_addresses: string[];
+  }>;
+};
+
 export type VmInfoResponse = {
   vm_name: string;
   result: CommandResult;
@@ -258,6 +268,13 @@ export function fetchOperations(
   limit: number,
 ): Promise<{ items: OperationRecord[] }> {
   return requestPoseidon(server, `/v1/operations?limit=${Math.max(1, Math.min(1000, limit))}`);
+}
+
+export function fetchVmIpAddress(
+  server: PoseidonServerConfig,
+  vmName: string,
+): Promise<VmIpAddressResponse> {
+  return requestPoseidon(server, `/v1/vms/${encodeURIComponent(vmName)}/ip`);
 }
 
 export function fetchVmInfo(

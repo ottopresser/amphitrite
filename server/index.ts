@@ -36,6 +36,7 @@ import {
   fetchVmConfig,
   fetchVmDisks,
   fetchVmInfo,
+  fetchVmIpAddress,
   fetchVmMetrics,
   fetchVmSnapshots,
   getApiKey,
@@ -335,6 +336,17 @@ app.get('/api/servers/:serverId/vms/:vmName', async (request, response) => {
     response.status(502).json({
       detail: error instanceof Error ? error.message : 'Unexpected error',
     });
+  }
+});
+
+app.get('/api/servers/:serverId/vms/:vmName/ip', async (request, response) => {
+  try {
+    response.json(await fetchVmIpAddress(
+      getServerConfig(request.params.serverId),
+      request.params.vmName,
+    ));
+  } catch (error) {
+    response.status(502).json({ detail: error instanceof Error ? error.message : 'Unexpected error' });
   }
 });
 

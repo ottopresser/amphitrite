@@ -23,6 +23,7 @@ import type {
   VmConfigResponse,
   VmDeleteResponse,
   VmInfoResponse,
+  VmIpAddressResponse,
   VmListItem,
 } from './types';
 
@@ -103,7 +104,44 @@ function getVmCpu(item: VmListItem): string {
   return getField(item.fields, ['cpu', 'cpus', 'vcpu', 'vcpus']);
 }
 
-function VmDetailPanel({ detail }: { detail: VmInfoResponse }) {
+function VmDetailPanel({ detail, serverId }: { detail: VmInfoResponse; serverId: string }) {
+  const [guestIp, setGuestIp] = useState<VmIpAddressResponse | null>(null);
+  const [ipError, setIpError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const controller = new AbortController();
+    setGuestIp(null);
+    setIpError(null);
+
+    async function refreshIp() {
+      try {
+        const payload = await readJson<VmIpAddressResponse>(
+          `/api/servers/${encodeURIComponent(serverId)}/vms/${encodeURIComponent(detail.vm_name)}/ip`,
+          { signal: controller.signal },
+        );
+        if (!disposed) {
+          setGuestIp(payload);
+          setIpError(null);
+        }
+      } catch (error) {
+        if (!disposed) {
+          setGuestIp(null);
+          setIpError(error instanceof Error ? error.message : 'IP lookup failed');
+        }
+      } finally {
+        if (!disposed) timer = setTimeout(refreshIp, 10_000);
+      }
+    }
+    void refreshIp();
+    return () => {
+      disposed = true;
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [serverId, detail.vm_name]);
+
   if (detail.result.return_code !== 0) {
     return (
       <div className="vm-detail">
@@ -192,58 +230,71 @@ function VmDetailPanel({ detail }: { detail: VmInfoResponse }) {
         <section className="vm-detail__section">
           <h3 className="vm-detail__section-title">Network</h3>
           <div className="vm-detail__cards">
-            {nics.map((nic) => (
-              <div className="vm-detail__card" key={nic.fields['number'] ?? nic.fields['emulation']}>
-                <div className="vm-detail__card-title">
-                  Interface {nic.fields['number']}
-                  {nic.fields['emulation'] ? <span className="tag">{nic.fields['emulation']}</span> : null}
-                </div>
-                <div className="vm-detail__fields">
-                  {nic.fields['virtual-switch'] ? (
-                    <div className="vm-detail__field">
-                      <span className="vm-detail__label">Switch</span>
-                      <strong>{nic.fields['virtual-switch']}</strong>
-                    </div>
-                  ) : null}
-                  {nic.fields['active-device'] && nic.fields['active-device'] !== '-' ? (
-                    <div className="vm-detail__field">
-                      <span className="vm-detail__label">Device</span>
-                      <code>{nic.fields['active-device']}</code>
-                    </div>
-                  ) : null}
-                  {nic.fields['fixed-mac-address'] ? (
-                    <div className="vm-detail__field">
-                      <span className="vm-detail__label">MAC</span>
-                      <code>{nic.fields['fixed-mac-address']}</code>
-                    </div>
-                  ) : null}
-                  {nic.fields['bridge'] ? (
-                    <div className="vm-detail__field">
-                      <span className="vm-detail__label">Bridge</span>
-                      <code>{nic.fields['bridge']}</code>
-                    </div>
-                  ) : null}
-                  {extractNicIpAddresses(nic.fields).length > 0 ? (
+            {nics.map((nic) => {
+              const mac = nic.fields['fixed-mac-address']?.toLowerCase();
+              const guestInterface = guestIp?.interfaces.find((iface) =>
+                mac ? iface.mac_address.toLowerCase() === mac
+                  : String(iface.network_index) === nic.fields['number'],
+              );
+              const addresses = Array.from(new Set([
+                ...extractNicIpAddresses(nic.fields),
+                ...(guestInterface?.ip_addresses ?? []),
+              ]));
+              return (
+                <div className="vm-detail__card" key={nic.fields['number'] ?? nic.fields['emulation']}>
+                  <div className="vm-detail__card-title">
+                    Interface {nic.fields['number']}
+                    {nic.fields['emulation'] ? <span className="tag">{nic.fields['emulation']}</span> : null}
+                  </div>
+                  <div className="vm-detail__fields">
+                    {nic.fields['virtual-switch'] ? (
+                      <div className="vm-detail__field">
+                        <span className="vm-detail__label">Switch</span>
+                        <strong>{nic.fields['virtual-switch']}</strong>
+                      </div>
+                    ) : null}
+                    {nic.fields['active-device'] && nic.fields['active-device'] !== '-' ? (
+                      <div className="vm-detail__field">
+                        <span className="vm-detail__label">Device</span>
+                        <code>{nic.fields['active-device']}</code>
+                      </div>
+                    ) : null}
+                    {nic.fields['fixed-mac-address'] ? (
+                      <div className="vm-detail__field">
+                        <span className="vm-detail__label">MAC</span>
+                        <code>{nic.fields['fixed-mac-address']}</code>
+                      </div>
+                    ) : null}
+                    {nic.fields['bridge'] ? (
+                      <div className="vm-detail__field">
+                        <span className="vm-detail__label">Bridge</span>
+                        <code>{nic.fields['bridge']}</code>
+                      </div>
+                    ) : null}
                     <div className="vm-detail__field">
                       <span className="vm-detail__label">IP Addresses</span>
-                      <code>{extractNicIpAddresses(nic.fields).join(', ')}</code>
+                      <code title={ipError ?? undefined}>
+                        {addresses.length > 0 ? addresses.join(', ')
+                          : ipError ? 'Lookup unavailable'
+                            : guestIp ? 'Not discovered' : 'Loading…'}
+                      </code>
+                    </div>
+                  </div>
+                  {nic.fields['bytes-in'] ?? nic.fields['bytes-out'] ? (
+                    <div className="vm-detail__traffic">
+                      <div className="vm-detail__traffic-row">
+                        <span>↓ In</span>
+                        <strong>{humanSize(nic.fields['bytes-in'] ?? '-')}</strong>
+                      </div>
+                      <div className="vm-detail__traffic-row">
+                        <span>↑ Out</span>
+                        <strong>{humanSize(nic.fields['bytes-out'] ?? '-')}</strong>
+                      </div>
                     </div>
                   ) : null}
                 </div>
-                {nic.fields['bytes-in'] ?? nic.fields['bytes-out'] ? (
-                  <div className="vm-detail__traffic">
-                    <div className="vm-detail__traffic-row">
-                      <span>↓ In</span>
-                      <strong>{humanSize(nic.fields['bytes-in'] ?? '-')}</strong>
-                    </div>
-                    <div className="vm-detail__traffic-row">
-                      <span>↑ Out</span>
-                      <strong>{humanSize(nic.fields['bytes-out'] ?? '-')}</strong>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
       ) : null}
@@ -2277,7 +2328,7 @@ export default function App() {
                   <>
                     <VmMetricsPanel serverId={selected.serverId} vmName={selectedVmName} />
                     {loadingDetail ? <p className="detail-placeholder">Loading VM detail…</p> : null}
-                    {detail ? <VmDetailPanel detail={detail} /> : null}
+                    {detail ? <VmDetailPanel key={`${selected.serverId}/${detail.vm_name}`} detail={detail} serverId={selected.serverId} /> : null}
                   </>
                 ) : null}
 
